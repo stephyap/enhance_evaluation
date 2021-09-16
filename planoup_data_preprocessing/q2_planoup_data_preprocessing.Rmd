@@ -1,0 +1,702 @@
+---
+title: "Q2 - Project HHH Data Preprocessing"
+---
+
+## Install and load packates
+
+```{r message=FALSE}
+library(dplyr)
+library(tidyr)
+library(readr)
+library(readxl)
+library(ggplot2)
+library(purrr)
+library(stringr)
+library(naniar)
+library(janitor)
+```
+
+
+## Import datasets
+
+```{r}
+demo <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Plano ISD/Data/2nd submission/6.1.2021-8.30.2021 - PlanoUP - Evaluation Data Collection Plan.xlsx", sheet=2)
+
+grades <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Plano ISD/Data/2nd submission/6.1.2021-8.30.2021 - PlanoUP - Evaluation Data Collection Plan.xlsx", sheet=3)
+```
+
+
+## Rename columns and values
+
+* empty spaces in column names will be replaced with "_"
+* all values will be in lowercase
+* all leading and trailing empty spaces will be removed
+* double spaces will be replaced with just one empty space
+
+```{r}
+demo <- demo %>%
+  mutate(
+    across(
+      .cols = where(is.character),
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  )
+
+grades <- grades %>%
+  mutate(
+    across(
+      .cols = where(is.character),
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  )
+
+demo <- clean_names(demo)
+grades <- clean_names(grades)
+```
+
+```{r}
+demo <- demo %>% rename(student_id = research_id)
+```
+
+
+## View datasets
+
+```{r}
+# show duplicated subject id from the demographics tables
+n_occur <- data.frame(table(demo$student_id))
+n_occur[n_occur$Freq > 1,] #tells you which ids occurred more than once.
+demo[demo$student_id %in% n_occur$Var1[n_occur$Freq > 1],]
+
+n_occur <- data.frame(table(grades$student_id))
+n_occur[n_occur$Freq > 1,] #tells you which ids occurred more than once.
+grades[grades$student_id %in% n_occur$Var1[n_occur$Freq > 1],]
+
+# delete columns that contain all NAs
+# demo <- demo[colSums(!is.na(demo)) > 0]
+# grades <- grades[colSums(!is.na(grades)) > 0]
+```
+
+```{r}
+# order by ID and date
+demo <- demo[order(demo$student_id, demo$enrollment_date), ] # 75 obs
+grades <- grades[order(grades$student_id), ] # 22 records
+
+# delete rows if participant ID is NA
+demo <- demo[!is.na(demo$student_id),]
+grades <- grades[!is.na(grades$student_id),]
+
+## rename columns
+grades <- grades %>% 
+  rename(
+    avg_grade_dec2020 = average_grade_sm1_dec_2020,
+    avg_grade_may2021 = average_grade_sm2_may_2021,
+    avg_grade_dec2021 = average_grade_sm1_dec_2021,
+    avg_grade_may2022 = average_grade_sm2_may_2022,
+    avg_grade_dec2022 = average_grade_sm1_dec_2022,
+  )
+```
+
+
+## Rename columns in grades dataset
+```{r}
+grades <- grades %>%
+  pivot_longer(
+    cols         = starts_with("avg_grade"),
+    names_to     = "date",
+    names_prefix = "avg_grade_",
+    values_to    = "avg_school_grade"
+) %>% 
+  mutate(
+    avg_school_grade_year =
+        case_when(
+        str_detect(date, "2020") ~ as.integer(2020),
+        str_detect(date, "2021") ~ as.integer(2021),
+        str_detect(date, "2022") ~ as.integer(2022)
+      ),
+    avg_school_grade_month =
+      case_when(
+        str_detect(date, "dec") ~ as.integer(12),
+        str_detect(date, "may") ~ as.integer(5)
+      )
+  ) %>% select(-c(date))
+```
+
+
+## Merge grades dataset with demographics (one-to-many relationship)
+
+```{r}
+# run for wide dataset
+main <- demo %>% 
+  left_join(grades, by = c("student_id" ="student_id")) %>% select(-c(plano_up_enrollment_date, grade, school))
+```
+
+```{r}
+# skip to here for long dataset
+main <- demo
+```
+
+
+```{r}
+main$transfer <- 0
+main$transfer[main$referral_date == "transfer"] <- 1
+main$referral_date[main$referral_date=="transfer"] <- NA
+
+main$referral_date <- as.numeric(as.character(main$referral_date))
+main$referral_date <- as.Date(main$referral_date, origin="1899-12-30")
+
+na_strings <- c("n/a", "na") # can add more if found
+
+main <- main %>% rename(referral_sources = referralsources)
+```
+
+```{r}
+main$gad7_date_0 <- format(main$gad7_date_0, format="%Y-%m-%d")
+main$gad7_date_3 <- format(main$gad7_date_3, format="%Y-%m-%d")
+main$gad7_date_6 <- format(main$gad7_date_6, format="%Y-%m-%d")
+main$gad7_date_9 <- format(main$gad7_date_9, format="%Y-%m-%d")
+main$gad7_date_12 <- format(main$gad7_date_12, format="%Y-%m-%d")
+
+main$enrollment_date <- format(main$enrollment_date, format="%Y-%m-%d")
+
+main$usda_date_0  <- format(main$usda_date_0, format="%Y-%m-%d")
+main$usda_date_3  <- format(main$usda_date_3, format="%Y-%m-%d")
+main$usda_date_6  <- format(main$usda_date_6, format="%Y-%m-%d")
+main$usda_date_9  <- format(main$usda_date_9, format="%Y-%m-%d")
+main$usda_date_12  <- format(main$usda_date_12, format="%Y-%m-%d")
+
+main$phqa_date_0 <- format(main$phqa_date_0, format="%Y-%m-%d")
+main$phqa_date_3 <- format(main$phqa_date_3, format="%Y-%m-%d")
+main$phqa_date_6 <- format(main$phqa_date_6, format="%Y-%m-%d")
+main$phqa_date_9 <- format(main$phqa_date_9, format="%Y-%m-%d")
+main$phqa_date_12 <- format(main$phqa_date_12, format="%Y-%m-%d")
+
+main$needs_assessment_date_0 <- format(main$needs_assessment_date_0, format="%Y-%m-%d")
+main$needs_assessment_date_3 <- format(main$needs_assessment_date_3, format="%Y-%m-%d")
+main$needs_assessment_date_6 <- format(main$needs_assessment_date_6, format="%Y-%m-%d")
+main$needs_assessment_date_9 <- format(main$needs_assessment_date_9, format="%Y-%m-%d")
+main$needs_assessment_date_12 <- format(main$needs_assessment_date_12, format="%Y-%m-%d")
+```
+
+```{r}
+# rearrange columns
+main <- main %>% select(student_id, age, sex, race, ethnicity, grade_level, 
+campus, referral_sources, referral_date, transfer, everything())
+
+demo <- main %>% select(student_id, age, sex, race, ethnicity, grade_level, 
+campus, referral_sources, referral_date, transfer, plano_up_cycle1, 
+enrollment_date)
+```
+
+# For long datasets 
+
+```{r}
+measures <- main %>% select(student_id,gad7_date_0, gad7_score_0, phqa_date_0, 
+                            phqa_score_0, usda_date_0, usda_score_0, gad7_date_3, 
+                            gad7_score_3, phqa_date_3, phqa_score_3, usda_date_3, 
+                            usda_score_3, gad7_date_6, gad7_score_6, phqa_date_6, 
+                            phqa_score_6, usda_date_6, usda_score_6, gad7_date_9, 
+                            gad7_score_9, phqa_date_9, phqa_score_9, usda_date_9, 
+                            usda_score_9, gad7_date_12, gad7_score_12, phqa_date_12, 
+                            phqa_score_12, usda_date_12, usda_score_12, 
+                            needs_assessment_date_0, need1rental_housing_0, 
+                            need1status_0, need2utility_assistance_0, need2status_0, 
+                            need3food_assistance_0, need3status_0, need4clothing_0, 
+                            need4status_0, need5mental_health_support_0, need5status_0, 
+                            need6parent_education_0, need6status_0, need7life_skills_training_0, 
+                            need7status_0, need8medical_care_0, need8status_0, 
+                            need9dental_vision_care_0, need9status_0, 
+                            need10academic_support_0, need10status_0, 
+                            need10average_grade_0, program_status_0, needs_assessment_date_3, 
+                            need1rental_housing_3, need1status_3, need2utility_assistance_3, 
+                            need2status_3, need3food_assistance_3, need3status_3, need4clothing_3, 
+                            need4status_3, need5mental_health_support_3, need5status_3, 
+                            need6parent_education_3, need6status_3, need7life_skills_training_3, 
+                            need7status_3, need8medical_care_3, need8status_3, need9dental_vision_care_3, 
+                            need9status_3, need10academic_support_3, need10status_3, 
+                            need10average_grade_3, program_status_3, needs_assessment_date_6, 
+                            need1rental_housing_6, need1status_6, need2utility_assistance_6, 
+                            need2status_6, need3food_assistance_6, need3status_6, need4clothing_6, 
+                            need4status_6, need5mental_health_support_6, need5status_6, 
+                            need6parent_education_6, need6status_6, need7life_skills_training_6, 
+                            need7status_6, need8medical_care_6, need8status_6, need9dental_vision_care_6, 
+                            need9status_6, need10academic_support_6, need10status_6, 
+                            need10average_grade_6, program_status_6, needs_assessment_date_9, 
+                            need1rental_housing_9, need1status_9, need2utility_assistance_9, 
+                            need2status_9, need3food_assistance_9, need3status_9, need4clothing_9, 
+                            need4status_9, need5mental_health_support_9, need5status_9, 
+                            need6parent_education_9, need6status_9, need7life_skills_training_9, 
+                            need7status_9, need8medical_care_9, need8status_9, need9dental_vision_care_9, 
+                            need9status_9, need10academic_support_9, need10status_9, 
+                            need10average_grade_9, program_status_9, needs_assessment_date_12, 
+                            need1rental_housing_12, need1status_12, need2utility_assistance_12, 
+                            need2status_12, need3food_assistance_12, need3status_12, 
+                            need4clothing_12, need4status_12, need5mental_health_support_12, 
+                            need5status_12, need6parent_education_12, need6status_12, 
+                            need7life_skills_training_12, need7status_12, need8medical_care_12, 
+                            need8status_12, need9dental_vision_care_12, need9status_12, 
+                            need10academic_support_12, need10status_12, need10average_grade_12, 
+                            program_status_12)
+```
+
+```{r}
+measures_gad7_score <- measures %>% select(student_id, contains("gad7_score"))
+measures_gad7_score_long <- measures_gad7_score %>% 
+  pivot_longer(
+    cols         = starts_with("gad7_score"),
+    names_to     = "timepoint",
+    names_prefix = "gad7_score_",
+    values_to    = "gad7_score"
+  )
+
+rm(measures_gad7_score)
+
+measures_gad7_date <- measures %>% select(student_id, contains("gad7_date"))
+measures_gad7_date_long <- measures_gad7_date %>% 
+  pivot_longer(
+    cols         = starts_with("gad7_date_"),
+    names_to     = "timepoint",
+    names_prefix = "gad7_date_",
+    values_to    = "gad7_date"
+  )
+rm(measures_gad7_date)
+measures_phqa_score <- measures %>% select(student_id, contains("phqa_score"))
+measures_phqa_score_long <- measures_phqa_score %>% 
+  pivot_longer(
+    cols         = starts_with("phqa_score"),
+    names_to     = "timepoint",
+    names_prefix = "phqa_score_",
+    values_to    = "phqa_score"
+  )
+rm(measures_phqa_score)
+
+measures_phqa_date <- measures %>% select(student_id, contains("phqa_date"))
+measures_phqa_date_long <- measures_phqa_date %>% 
+  pivot_longer(
+    cols         = starts_with("phqa_date"),
+    names_to     = "timepoint",
+    names_prefix = "phqa_date_",
+    values_to    = "phqa_date"
+  )
+rm(measures_phqa_date)
+measures_usda_score <- measures %>% select(student_id, contains("usda_score"))
+measures_usda_score_long <- measures_usda_score %>% 
+  pivot_longer(
+    cols         = starts_with("usda_score"),
+    names_to     = "timepoint",
+    names_prefix = "usda_score_",
+    values_to    = "usda_score"
+  )
+rm(measures_usda_score)
+measures_usda_date <- measures %>% select(student_id, contains("usda_date"))
+measures_usda_date_long <- measures_usda_date %>% 
+  pivot_longer(
+    cols         = starts_with("usda_date"),
+    names_to     = "timepoint",
+    names_prefix = "usda_date_",
+    values_to    = "usda_date"
+  )
+rm(measures_usda_date)
+
+outcomes <- measures_gad7_date_long %>% 
+  left_join(measures_gad7_score_long, by = c("student_id"="student_id", "timepoint"="timepoint")) %>% 
+  left_join(measures_phqa_date_long, by = c("student_id"="student_id", "timepoint"="timepoint")) %>%
+  left_join(measures_phqa_score_long, by = c("student_id"="student_id", "timepoint"="timepoint")) %>%
+  left_join(measures_usda_date_long, by = c("student_id"="student_id", "timepoint"="timepoint")) %>%
+  left_join(measures_usda_score_long, by = c("student_id"="student_id", "timepoint"="timepoint"))
+
+rm(measures_gad7_date_long, measures_gad7_score_long, measures_phqa_date_long, measures_phqa_score_long, measures_usda_date_long, measures_usda_score_long, n_occur)
+```
+
+```{r}
+measures <- measures %>% rename(
+  need_1_rental_housing_0 = need1rental_housing_0, 
+  need_1_status_0 = need1status_0, 
+  need_2_utility_assistance_0 = need2utility_assistance_0, 
+  need_2_status_0 = need2status_0, 
+  need_3_food_assistance_0 = need3food_assistance_0, 
+  need_3_status_0 = need3status_0, 
+  need_4_clothing_0 = need4clothing_0, 
+  need_4_status_0 = need4status_0, 
+  need_5_mental_health_support_0 = need5mental_health_support_0, 
+  need_5_status_0 = need5status_0, 
+  need_6_parent_education_0 = need6parent_education_0, 
+  need_6_status_0 = need6status_0, 
+  need_7_life_skills_training_0 = need7life_skills_training_0, 
+  need_7_status_0 = need7status_0, 
+  need_8_medical_care_0 = need8medical_care_0, 
+  need_8_status_0 = need8status_0, 
+  need_9_dental_vision_care_0 = need9dental_vision_care_0, 
+  need_9_status_0 = need9status_0, 
+  need_10_academic_support_0 = need10academic_support_0, 
+  need_10_status_0 = need10status_0, 
+  need_1_rental_housing_3 = need1rental_housing_3, 
+  need_1_status_3 = need1status_3, 
+  need_2_utility_assistance_3 = need2utility_assistance_3, 
+  need_2_status_3 = need2status_3, 
+  need_3_food_assistance_3 = need3food_assistance_3, 
+  need_3_status_3 = need3status_3, 
+  need_4_clothing_3 = need4clothing_3, 
+  need_4_status_3 = need4status_3, 
+  need_5_mental_health_support_3 = need5mental_health_support_3, 
+  need_5_status_3 = need5status_3, 
+  need_6_parent_education_3 = need6parent_education_3, 
+  need_6_status_3 = need6status_3, 
+  need_7_life_skills_training_3 = need7life_skills_training_3, 
+  need_7_status_3 = need7status_3, 
+  need_8_medical_care_3 = need8medical_care_3, 
+  need_8_status_3 = need8status_3, 
+  need_9_dental_vision_care_3 = need9dental_vision_care_3, 
+  need_9_status_3 = need9status_3, 
+  need_10_academic_support_3 = need10academic_support_3, 
+  need_10_status_3 = need10status_3,
+  need_1_rental_housing_6 = need1rental_housing_6, 
+  need_1_status_6 = need1status_6, 
+  need_2_utility_assistance_6 = need2utility_assistance_6, 
+  need_2_status_6 = need2status_6, 
+  need_3_food_assistance_6 = need3food_assistance_6, 
+  need_3_status_6 = need3status_6, 
+  need_4_clothing_6 = need4clothing_6, 
+  need_4_status_6 = need4status_6, 
+  need_5_mental_health_support_6 = need5mental_health_support_6, 
+  need_5_status_6 = need5status_6, 
+  need_6_parent_education_6 = need6parent_education_6, 
+  need_6_status_6 = need6status_6, 
+  need_7_life_skills_training_6 = need7life_skills_training_6, 
+  need_7_status_6 = need7status_6, 
+  need_8_medical_care_6 = need8medical_care_6, 
+  need_8_status_6 = need8status_6, 
+  need_9_dental_vision_care_6 = need9dental_vision_care_6, 
+  need_9_status_6 = need9status_6, 
+  need_10_academic_support_6 = need10academic_support_6, 
+  need_10_status_6 = need10status_6,
+  need_1_rental_housing_9 = need1rental_housing_9, 
+  need_1_status_9 = need1status_9, 
+  need_2_utility_assistance_9 = need2utility_assistance_9, 
+  need_2_status_9 = need2status_9, 
+  need_3_food_assistance_9 = need3food_assistance_9, 
+  need_3_status_9 = need3status_9, 
+  need_4_clothing_9 = need4clothing_9, 
+  need_4_status_9 = need4status_9, 
+  need_5_mental_health_support_9 = need5mental_health_support_9, 
+  need_5_status_9 = need5status_9, 
+  need_6_parent_education_9 = need6parent_education_9, 
+  need_6_status_9 = need6status_9, 
+  need_7_life_skills_training_9 = need7life_skills_training_9, 
+  need_7_status_9 = need7status_9, 
+  need_8_medical_care_9 = need8medical_care_9, 
+  need_8_status_9 = need8status_9, 
+  need_9_dental_vision_care_9 = need9dental_vision_care_9, 
+  need_9_status_9 = need9status_9, 
+  need_10_academic_support_9 = need10academic_support_9, 
+  need_10_status_9 = need10status_9,
+  need_1_rental_housing_12 = need1rental_housing_12, 
+  need_1_status_12 = need1status_12, 
+  need_2_utility_assistance_12 = need2utility_assistance_12, 
+  need_2_status_12 = need2status_12, 
+  need_3_food_assistance_12 = need3food_assistance_12, 
+  need_3_status_12 = need3status_12, 
+  need_4_clothing_12 = need4clothing_12, 
+  need_4_status_12 = need4status_12, 
+  need_5_mental_health_support_12 = need5mental_health_support_12, 
+  need_5_status_12 = need5status_12, 
+  need_6_parent_education_12 = need6parent_education_12, 
+  need_6_status_12 = need6status_12, 
+  need_7_life_skills_training_12 = need7life_skills_training_12, 
+  need_7_status_12 = need7status_12, 
+  need_8_medical_care_12 = need8medical_care_12, 
+  need_8_status_12 = need8status_12, 
+  need_9_dental_vision_care_12 = need9dental_vision_care_12, 
+  need_9_status_12 = need9status_12, 
+  need_10_academic_support_12 = need10academic_support_12, 
+  need_10_status_12 = need10status_12
+)
+```
+
+
+```{r}
+needs_ass_date <- measures %>% select(student_id, contains("needs_assessment_date"))
+needs_ass_date_long <- needs_ass_date %>% 
+  pivot_longer(
+    cols         = starts_with("needs_assessment_date"),
+    names_to     = "timepoint",
+    names_prefix = "needs_assessment_date_",
+    values_to    = "needs_assessment_date"
+  )
+
+needs_ass_status <- measures %>% select(student_id, contains("need_"))
+
+need1_yn <- needs_ass_status %>% select(student_id, contains("need_1_rental_housing"))
+need1_yn_long <- need1_yn %>% 
+  pivot_longer(
+    cols         = starts_with("need_1_rental_housing"),
+    names_to     = "timepoint",
+    names_prefix = "need_1_rental_housing_",
+    values_to    = "need_housing"
+  )
+
+need1_status <- needs_ass_status %>% select(student_id, contains("need_1_status"))
+need1_status_long <- need1_status %>% 
+  pivot_longer(
+    cols         = starts_with("need_1_status"),
+    names_to     = "timepoint",
+    names_prefix = "need_1_status_",
+    values_to    = "need_housing_status"
+  )
+
+need1 <- need1_yn_long %>% 
+  left_join(need1_status_long, by = c("student_id"="student_id", "timepoint"="timepoint"))
+
+
+
+need2 <- needs_ass_status %>% select(student_id, contains("need_2"))
+need2_yn <- needs_ass_status %>% select(student_id, contains("need_2_utility_assistance"))
+need2_yn_long <- need2_yn %>% 
+  pivot_longer(
+    cols         = starts_with("need_2_utility_assistance"),
+    names_to     = "timepoint",
+    names_prefix = "need_2_utility_assistance_",
+    values_to    = "need_utility_assistance"
+  )
+
+need2_status <- needs_ass_status %>% select(student_id, contains("need_2_status"))
+need2_status_long <- need2_status %>% 
+  pivot_longer(
+    cols         = starts_with("need_2_status"),
+    names_to     = "timepoint",
+    names_prefix = "need_2_status_",
+    values_to    = "need_utility_assistance_status"
+  )
+
+need2 <- need2_yn_long %>% 
+  left_join(need2_status_long, by = c("student_id"="student_id", "timepoint"="timepoint"))
+
+
+
+
+need3 <- needs_ass_status %>% select(student_id, contains("need_3"))
+need3_yn <- needs_ass_status %>% select(student_id, contains("need_3_food_assistance"))
+need3_yn_long <- need3_yn %>% 
+  pivot_longer(
+    cols         = starts_with("need_3_food_assistance"),
+    names_to     = "timepoint",
+    names_prefix = "need_3_food_assistance_",
+    values_to    = "need_food_assistance"
+  )
+
+need3_status <- needs_ass_status %>% select(student_id, contains("need_3_status"))
+need3_status_long <- need3_status %>% 
+  pivot_longer(
+    cols         = starts_with("need_3_status"),
+    names_to     = "timepoint",
+    names_prefix = "need_3_status_",
+    values_to    = "need_food_assistance_status"
+  )
+
+need3 <- need3_yn_long %>% 
+  left_join(need3_status_long, by = c("student_id"="student_id", "timepoint"="timepoint"))
+
+
+
+need4 <- needs_ass_status %>% select(student_id, contains("need_4"))
+need4_yn <- needs_ass_status %>% select(student_id, contains("need_4_clothing"))
+need4_yn_long <- need4_yn %>% 
+  pivot_longer(
+    cols         = starts_with("need_4_clothing"),
+    names_to     = "timepoint",
+    names_prefix = "need_4_clothing_",
+    values_to    = "need_clothing"
+  )
+
+need4_status <- needs_ass_status %>% select(student_id, contains("need_4_status"))
+need4_status_long <- need4_status %>% 
+  pivot_longer(
+    cols         = starts_with("need_4_status"),
+    names_to     = "timepoint",
+    names_prefix = "need_4_status_",
+    values_to    = "need_clothing_status"
+  )
+
+need4 <- need4_yn_long %>% 
+  left_join(need4_status_long, by = c("student_id"="student_id", "timepoint"="timepoint"))
+
+
+need5 <- needs_ass_status %>% select(student_id, contains("need_5"))
+need5_yn <- needs_ass_status %>% select(student_id, contains("need_5_mental_health_support"))
+need5_yn_long <- need5_yn %>% 
+  pivot_longer(
+    cols         = starts_with("need_5_mental_health_support"),
+    names_to     = "timepoint",
+    names_prefix = "need_5_mental_health_support_",
+    values_to    = "need_mental_health"
+  )
+
+need5_status <- needs_ass_status %>% select(student_id, contains("need_5_status"))
+need5_status_long <- need5_status %>% 
+  pivot_longer(
+    cols         = starts_with("need_5_status"),
+    names_to     = "timepoint",
+    names_prefix = "need_5_status_",
+    values_to    = "need_mental_health_status"
+  )
+
+need5 <- need5_yn_long %>% 
+  left_join(need5_status_long, by = c("student_id"="student_id", "timepoint"="timepoint"))
+
+
+need6 <- needs_ass_status %>% select(student_id, contains("need_6"))
+need6_yn <- needs_ass_status %>% select(student_id, contains("need_6_parent_education"))
+need6_yn_long <- need6_yn %>% 
+  pivot_longer(
+    cols         = starts_with("need_6_parent_education"),
+    names_to     = "timepoint",
+    names_prefix = "need_6_parent_education_",
+    values_to    = "need_parent_education"
+  )
+
+need6_status <- needs_ass_status %>% select(student_id, contains("need_6_status"))
+need6_status_long <- need6_status %>% 
+  pivot_longer(
+    cols         = starts_with("need_6_status"),
+    names_to     = "timepoint",
+    names_prefix = "need_6_status_",
+    values_to    = "need_parent_education_status"
+  )
+
+need6 <- need6_yn_long %>% 
+  left_join(need6_status_long, by = c("student_id"="student_id", "timepoint"="timepoint"))
+
+
+need7 <- needs_ass_status %>% select(student_id, contains("need_7"))
+need7_yn <- needs_ass_status %>% select(student_id, contains("need_7_life_skills_training"))
+need7_yn_long <- need7_yn %>% 
+  pivot_longer(
+    cols         = starts_with("need_7_life_skills_training"),
+    names_to     = "timepoint",
+    names_prefix = "need_7_life_skills_training_",
+    values_to    = "need_life_skills"
+  )
+
+need7_status <- needs_ass_status %>% select(student_id, contains("need_7_status"))
+need7_status_long <- need7_status %>% 
+  pivot_longer(
+    cols         = starts_with("need_7_status"),
+    names_to     = "timepoint",
+    names_prefix = "need_7_status_",
+    values_to    = "need_life_skills_status"
+  )
+
+need7 <- need7_yn_long %>% 
+  left_join(need7_status_long, by = c("student_id"="student_id", "timepoint"="timepoint"))
+
+
+need8 <- needs_ass_status %>% select(student_id, contains("need_8"))
+need8_yn <- needs_ass_status %>% select(student_id, contains("need_8_medical_care"))
+need8_yn_long <- need8_yn %>% 
+  pivot_longer(
+    cols         = starts_with("need_8_medical_care"),
+    names_to     = "timepoint",
+    names_prefix = "need_8_medical_care_",
+    values_to    = "need_medical_care"
+  )
+
+need8_status <- needs_ass_status %>% select(student_id, contains("need_8_status"))
+need8_status_long <- need8_status %>% 
+  pivot_longer(
+    cols         = starts_with("need_8_status"),
+    names_to     = "timepoint",
+    names_prefix = "need_8_status_",
+    values_to    = "need_medical_care_status"
+  )
+
+need8 <- need8_yn_long %>% 
+  left_join(need8_status_long, by = c("student_id"="student_id", "timepoint"="timepoint"))
+
+
+need9 <- needs_ass_status %>% select(student_id, contains("need_9"))
+need9_yn <- needs_ass_status %>% select(student_id, contains("need_9_dental_vision_care"))
+need9_yn_long <- need9_yn %>% 
+  pivot_longer(
+    cols         = starts_with("need_9_dental_vision_care"),
+    names_to     = "timepoint",
+    names_prefix = "need_9_dental_vision_care_",
+    values_to    = "need_dental_vision_care"
+  )
+
+need9_status <- needs_ass_status %>% select(student_id, contains("need_9_status"))
+need9_status_long <- need9_status %>% 
+  pivot_longer(
+    cols         = starts_with("need_9_status"),
+    names_to     = "timepoint",
+    names_prefix = "need_9_status_",
+    values_to    = "need_dental_vision_care_status"
+  )
+
+need9 <- need9_yn_long %>% 
+  left_join(need9_status_long, by = c("student_id"="student_id", "timepoint"="timepoint"))
+
+
+needs_assessment <- needs_ass_date_long %>% 
+  left_join(need1, by = c("student_id"="student_id", "timepoint"="timepoint")) %>%
+  left_join(need2, by = c("student_id"="student_id", "timepoint"="timepoint")) %>%
+  left_join(need3, by = c("student_id"="student_id", "timepoint"="timepoint")) %>% 
+  left_join(need4, by = c("student_id"="student_id", "timepoint"="timepoint")) %>% 
+  left_join(need5, by = c("student_id"="student_id", "timepoint"="timepoint")) %>% 
+  left_join(need6, by = c("student_id"="student_id", "timepoint"="timepoint")) %>% 
+  left_join(need7, by = c("student_id"="student_id", "timepoint"="timepoint")) %>% 
+  left_join(need8, by = c("student_id"="student_id", "timepoint"="timepoint")) %>% 
+  left_join(need9, by = c("student_id"="student_id", "timepoint"="timepoint"))
+
+rm(need1, need1_status, need1_status_long,  need2, need2_status, need2_status_long,
+   need3, need3_status, need3_status_long, need4, need4_status, need4_status_long,
+   need5, need5_status, need5_status_long, need6, need6_status, need6_status_long,
+   need7, need7_status, need7_status_long, need8, need8_status, need8_status_long,
+   need9, need9_status, need9_status_long, need1_yn, need1_yn_long,need2_yn, 
+   need2_yn_long, need3_yn, need3_yn_long, need4_yn, need4_yn_long,
+   need5_yn, need5_yn_long, need6_yn, need6_yn_long, need7_yn, need7_yn_long,
+   need8_yn, need8_yn_long, need9_yn, need9_yn_long, needs_ass_date, 
+   needs_ass_date_long, needs_ass_status)
+```
+
+```{r}
+program_status <- measures %>% select(student_id, contains("program_status"))
+
+program_status_long <- program_status %>%
+  pivot_longer(
+    cols         = starts_with("program_status"),
+    names_to     = "timepoint",
+    names_prefix = "program_status_",
+    values_to    = "program_status"
+  )
+
+# remove files not needed to be saved:
+rm(program_status)
+```
+
+
+
+## Save merged file
+```{r}
+# long version
+readr::write_csv(demo, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Plano ISD/Analysis/Steph/long datasets/q2/q2_planoup_demo_09152021.csv")
+
+readr::write_csv(grades, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Plano ISD/Analysis/Steph/long datasets/q2/q2_planoup_grades_09152021.csv")
+
+readr::write_csv(outcomes, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Plano ISD/Analysis/Steph/long datasets/q2/q2_planoup_measures_09152021.csv")
+
+readr::write_csv(needs_assessment, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Plano ISD/Analysis/Steph/long datasets/q2/q2_planoup_needs_assessment_09152021.csv")
+
+readr::write_csv(program_status_long, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Plano ISD/Analysis/Steph/long datasets/q2/q2_planoup_program_status_09152021.csv")
+
+# wide version
+readr::write_csv(main, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Plano ISD/Analysis/Steph/wide datasets/q2/q2_planoup_wide_09152021.csv")
+```
+
+

@@ -1,0 +1,198 @@
+---
+title: "Q2 - Railroad Data Preprocessing"
+---
+
+## Install and load packates
+
+```{r message=FALSE}
+library(dplyr)
+library(tidyr)
+library(readr)
+library(readxl)
+library(ggplot2)
+library(purrr)
+library(stringr)
+library(naniar)
+library(janitor)
+```
+
+
+## Import datasets for merging
+```{r}
+main <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Eastside Community Services/Data/2021-09-10/Copy of Railroad Spreadsheet Copy A1a 8 26 21abc.xlsx", sheet = 2)
+
+counseling <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Eastside Community Services/Data/2021-09-10/Copy of Railroad Spreadsheet Copy A1a 8 26 21abc.xlsx", sheet = 3)
+  
+financial_lit <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Eastside Community Services/Data/2021-09-10/Copy of Railroad Spreadsheet Copy A1a 8 26 21abc.xlsx", sheet = 4)
+  
+heels_up <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Eastside Community Services/Data/2021-09-10/Copy of Railroad Spreadsheet Copy A1a 8 26 21abc.xlsx", sheet = 5)
+  
+na_aa <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Eastside Community Services/Data/2021-09-10/Copy of Railroad Spreadsheet Copy A1a 8 26 21abc.xlsx", sheet = 6)
+  
+physical_health <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Eastside Community Services/Data/2021-09-10/Copy of Railroad Spreadsheet Copy A1a 8 26 21abc.xlsx", sheet = 7)
+```
+
+```{r}
+main <- main %>% 
+  mutate(
+    across(
+      .cols = where(is.character), 
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  )
+
+
+
+main <- clean_names(main)
+aggregate <- clean_names(aggregate)
+
+main <- main[!is.na(main$id),]
+```
+
+## Combine datasets 
+
+```{r}
+main$date_of_intake <- as.Date(main$reach_out_1_date, "%m/%d/%Y")
+main$reach_out_1_date <- as.Date(main$reach_out_1_date, "%m/%d/%Y")
+main$reach_out_2_date <- as.Date(main$reach_out_2_date, "%m/%d/%Y")
+main$reach_out_3_date <- as.Date(main$reach_out_3_date, "%m/%d/%Y")
+main$reach_out_4_date <- as.Date(main$reach_out_4_date, "%m/%d/%Y")
+main$reach_out_5_date <- as.Date(main$reach_out_5_date, "%m/%d/%Y")
+main$reach_out_6_date <- as.Date(main$reach_out_6_date, "%m/%d/%Y")
+
+main$phq_9_date_0 <- as.Date(main$phq_9_date_0, "%m/%d/%Y")
+main$phq_9_date_3 <- as.Date(main$phq_9_date_3, "%m/%d/%Y")
+main$phq_9_date_6 <- as.Date(main$phq_9_date_6, "%m/%d/%Y")
+main$phq_9_date_9 <- as.Date(main$phq_9_date_9, "%m/%d/%Y")
+main$phq_9_date_12 <- as.Date(main$phq_9_date_12, "%m/%d/%Y")
+
+# main$reach_out_2_date <- strptime(main$reach_out_2_date, format="%m/%d/%Y")
+
+main <- main[order(main$id, main$date_of_intake), ]
+
+# show duplicated subject id from the demographics tables
+n_occur <- data.frame(table(main$id))
+n_occur[n_occur$Freq > 1,] #tells you which ids occurred more than once.
+main[main$id %in% n_occur$Var1[n_occur$Freq > 1],]
+
+main <- main %>% rename(
+  participant_id = id
+)
+```
+
+
+```{r}
+aggregate <- aggregate %>% 
+  rename(
+    jan_2021 = "x44197", 
+    feb_2021 = "x44228", 
+    mar_2021 = "x44256", 
+    apr_2021 = "x44287", 
+    may_2021 = "x44317", 
+    jun_2021 = "x44348", 
+    jul_2021 = "x44378", 
+    aug_2021 = "x44409", 
+    sep_2021 = "x44440", 
+    oct_2021 = "x44470", 
+    nov_2021 = "x44501",
+    dec_2021 = "x44531"
+  )
+```
+
+# Standardize NAs
+
+```{r}
+# using replace_with_na_all to replace ALL values that meet a condition across an entire dataset.
+na_strings <- c("n/a") # can add more if found
+main <- main %>% naniar::replace_with_na_all(condition= ~.x %in% na_strings)
+```
+
+# Renaming variables to be more consistent
+
+```{r}
+main$sex[main$sex == "f"] <- "female"
+main$sex[main$sex == "m"] <- "male"
+main$housing_status[main$housing_status == "living w/ family"] <- "living w family"
+main$housing_status[main$housing_status == "lives w family"] <- "living w family"
+main$housing_status[main$housing_status == "lives with family"] <- "living w family"
+main$housing_status[main$housing_status == "living with family"] <- "living w family"
+```
+
+
+```{r}
+# wide datasets
+readr::write_csv(main, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Eastside Community Services/Analysis/Steph/wide datasets/q1_railroad_data_collection_07222021.csv")
+```
+
+
+# Prepare for long datasets
+
+```{r}
+all <- main
+```
+
+```{r}
+main <- all %>% 
+  select("participant_id", "date_of_intake", "age", "sex", "ethnicity",
+         "referral_sources","own_transporation", "housing_status",
+         "primary_language", "employment", "marital_status", 
+         "reach_out_1_mental_health_counseling_services", "reach_out_1_date",
+         "reach_out_2_food", "reach_out_2_date", 
+         "reach_out_3_financial_literacy_life_skills", "reach_out_3_date",
+         "reach_out_4_physical_health", "reach_out_4_date", 
+         "reach_out_5_walking_club_heels_club", "reach_out_5_date",
+         "reach_out_6_na_aa_meetings", "reach_out_6_date")
+```
+
+```{r}
+program_status <- all %>% 
+  select(participant_id, starts_with("program_status"))
+
+program_status <- program_status %>% 
+  pivot_longer(
+    cols         = starts_with("program_status"),
+    names_to     = "timepoint",
+    names_prefix = "program_status_",
+    values_to    = "program_status"
+  )
+```
+
+```{r}
+phq9_date <- all %>% select(participant_id, starts_with("phq_9_date"))
+phq9_date_long <- phq9_date %>% 
+  pivot_longer(
+    cols         = starts_with("phq_9_date"),
+    names_to     = "timepoint",
+    names_prefix = "phq_9_date_",
+    values_to    = "phq9_date"
+  )
+
+
+phq9_score <- all %>% select(participant_id, starts_with("phq_9_score"))
+phq9_score_long <- phq9_score %>% 
+  pivot_longer(
+    cols         = starts_with("phq_9_score"),
+    names_to     = "timepoint",
+    names_prefix = "phq_9_score_",
+    values_to    = "phq9_score"
+  )
+
+phq9 <- phq9_date_long %>% left_join(phq9_score_long, by = c("participant_id" = "participant_id", "timepoint" = "timepoint"))
+```
+
+
+```{r}
+# long datasets
+readr::write_csv(main, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Eastside Community Services/Analysis/Steph/long datasets/q1_railroad_demo_reachout_07222021.csv")
+
+readr::write_csv(aggregate, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Eastside Community Services/Analysis/Steph/long datasets/q1_railroad_aggregate_07222021.csv")
+
+readr::write_csv(phq9, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Eastside Community Services/Analysis/Steph/long datasets/q1_railroad_phq9_07222021.csv")
+
+readr::write_csv(program_status, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Eastside Community Services/Analysis/Steph/long datasets/q1_railroad_program_status_07222021.csv")
+```
+

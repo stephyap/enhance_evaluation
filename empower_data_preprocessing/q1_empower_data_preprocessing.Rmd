@@ -1,0 +1,152 @@
+---
+title: "Q1- Empower Data-Preprocessing"
+output: html_notebook
+---
+
+# Install packages
+```{r message=FALSE}
+library(dplyr)
+library(tidyr)
+library(readr)
+library(readxl)
+library(ggplot2)
+library(purrr)
+library(stringr)
+library(naniar)
+library(janitor)
+library(tidyverse)
+```
+
+# Import datasets
+```{r}
+adrc <- readxl::read_xlsx("/Users/cyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/UWTC/Data/2021-07-02/Copy of Evaluation Data Collection Plan-TarrantParker-Project EmpowerV2.2021.6.xlsx", sheet=2)
+
+mhmr <- readxl::read_xlsx("/Users/cyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/UWTC/Data/2021-07-02/Copy of Evaluation Data Collection Plan-TarrantParker-Project EmpowerV2.2021.6.xlsx", sheet=3)
+
+mow <- readxl::read_xlsx("/Users/cyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/UWTC/Data/2021-07-02/Copy of Evaluation Data Collection Plan-TarrantParker-Project EmpowerV2.2021.6.xlsx", sheet=4)
+
+nctcog <- readxl::read_xlsx("/Users/cyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/UWTC/Data/2021-07-02/Copy of Evaluation Data Collection Plan-TarrantParker-Project EmpowerV2.2021.6.xlsx", sheet=5)
+
+rrc <- readxl::read_xlsx("/Users/cyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/UWTC/Data/2021-07-02/Copy of Evaluation Data Collection Plan-TarrantParker-Project EmpowerV2.2021.6.xlsx", sheet=6)
+
+tafb <- readxl::read_xlsx("/Users/cyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/UWTC/Data/2021-07-02/Copy of Evaluation Data Collection Plan-TarrantParker-Project EmpowerV2.2021.6.xlsx", sheet=7)
+
+htcc <- readxl::read_xlsx("/Users/cyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/UWTC/Data/2021-07-02/Copy of Evaluation Data Collection Plan-TarrantParker-Project EmpowerV2.2021.6.xlsx", sheet=8)
+
+```
+
+# Reformating labels and values for all datasets
+```{r}
+adrc <- adrc %>% 
+  mutate(
+    across(
+      .cols = where(is.character), 
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  )
+
+htcc <- htcc %>% 
+  mutate(
+    across(
+      .cols = where(is.character), 
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  )
+
+mhmr <- mhmr %>% 
+  mutate(
+    across(
+      .cols = where(is.character), 
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  )
+
+mow <- mow %>% 
+  mutate(
+    across(
+      .cols = where(is.character), 
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  )
+
+nctcog <- nctcog %>% 
+  mutate(
+    across(
+      .cols = where(is.character), 
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  )
+
+rrc <- rrc %>% 
+  mutate(
+    across(
+      .cols = where(is.character), 
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  )
+
+tafb <- tafb %>% 
+  mutate(
+    across(
+      .cols = where(is.character), 
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  )
+
+
+adrc <- clean_names(adrc) %>% rename(id = client_id)
+mhmr <- clean_names(mhmr) %>% rename(id = client_id)
+mow <- clean_names(mow) %>% rename(id = client_id)
+nctcog <- clean_names(nctcog) %>% rename(id = client_id)
+rrc <- clean_names(rrc) %>% rename(id = client_id)
+tafb <- clean_names(tafb) %>% rename(id = client_id)
+```
+
+
+# ADRC data restructuring
+```{r}
+adrc_demo <- adrc %>% select(id, referred_from, date_referred, zip_code, age, 
+gender, race, ethnicity, language, enrolled_y_n, status, 
+intervention_s_recevied, opened_screened_date, 
+closed_date, referred_to_project_empower_partner_s)
+
+adrc_measures <- adrc %>% select(id, gse_1_score, gse_1_date, gse_2_score, 
+                                 gse_2_date, gse_3_score, gse_3_date)
+
+rm(adrc)
+```
+
+# MHMR data restructuring
+# MOW data restructuring
+# NCTCOG data restructuring
+# RRC data restructuring
+# TAFB data restructuring
+# HTCC data restructuring

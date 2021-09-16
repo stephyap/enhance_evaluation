@@ -1,0 +1,537 @@
+---
+title: "Q2 - Beyond Blue Data Preprocessing"
+---
+
+# Install packages
+```{r message=FALSE}
+library(dplyr)
+library(tidyr)
+library(readr)
+library(readxl)
+library(ggplot2)
+library(purrr)
+library(stringr)
+library(naniar)
+library(janitor)
+library(tidyverse)
+library(tibble)
+```
+
+# Import datasets
+```{r}
+main <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/LifePath Systems/Data/2nd submission/2021-09-15/Collin_LifePath Systems_09152021.xlsx", sheet=2)
+
+referrals <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/LifePath Systems/Data/2nd submission/2021-09-14/Referral List 9.14.21.xlsx")
+```
+
+```{r}
+main <- main %>% 
+  mutate(
+    across(
+      .cols = where(is.character), 
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  )
+
+referrals <- referrals %>% 
+  mutate(
+    across(
+      .cols = where(is.character), 
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  )
+
+main <- clean_names(main)
+referrals <- clean_names(referrals) %>% rename(participant_id = client_client_number)
+```
+
+# Rename and remove unnecessary columns from main dataset
+
+```{r}
+na_strings <- c("n/a", "working to reach", "NA", "na") # can add more if found
+main <- main %>% naniar::replace_with_na_all(condition= ~.x %in% na_strings)
+referrals <- referrals %>% naniar::replace_with_na_all(condition= ~.x %in% na_strings)
+```
+
+```{r}
+main <- main %>% 
+  rename(
+    phq_9_score_0              = phq_7_score_0,
+    assessments_date_9         = assessements_date_9,
+    need_5_housing_security_3  = need_5_hoisting_security_3,
+    need_5_housing_security_6  = need_5_housting_security_6
+  ) 
+```
+
+
+### Change datatypes for some columns 
+
+```{r}
+main$enrollment_date      <- as.Date(main$enrollment_date)
+main$screening_date <- main$screening_date %>% as.numeric(main$screening_date)
+main$screening_date <- main$screening_date %>% as.Date(origin="1899-12-30")
+main$assessments_date_0 <- main$assessments_date_0 %>% as.numeric(main$assessments_date_0)
+main$assessments_date_0 <- main$assessments_date_0 %>% as.Date(origin="1899-12-30")
+main$assessments_date_3 <- main$assessments_date_3 %>% as.numeric(main$assessments_date_3)
+main$assessments_date_3 <- main$assessments_date_3 %>% as.Date(origin="1899-12-30")
+main$assessments_date_6   <- as.Date(main$assessments_date_6)
+main$assessments_date_9   <- as.Date(main$assessments_date_9)
+main$assessments_date_12  <- as.Date(main$assessments_date_12)
+
+main$participant_id <- as.character(main$participant_id)
+```
+
+```{r}
+# check for duplicated participant participant_id from the demographics tables - 0 obs
+n_occur <- data.frame(table(main$participant_id))
+n_occur[n_occur$Freq > 1,] #tells you which participant_ids occurred more than once.
+main[main$participant_id %in% n_occur$Var1[n_occur$Freq > 1],]
+```
+
+```{r}
+# order by participant_id and date
+main <- main[order(main$participant_id, main$screening_date, main$enrollment_date), ] # 95 obs
+
+# remove records without participant_id
+main <- main[!is.na(main$participant_id),]
+```
+
+```{r}
+demo <- main %>% select(participant_id, age, sex, race, ethnicity, 
+                        referral_sources,   screening_date, 
+                        eligible_for_bb_y_or_n, enrollment_date, 
+                        reason_ineligible)
+```
+
+```{r}
+dput(as.character(colnames(main)))
+```
+
+```{r}
+measures <- main %>% select(participant_id, program_status_0, assessments_date_0, 
+phq_9_score_0, gad_7_score_0, usda_score_0, needs_assessment_date_0, 
+need_1_mental_health_needs_0, need_2_medical_needs_0, need_3_transportation_0, 
+need_4_social_supports_0, need_5_housing_security_0, need_6_food_insecurity_0, 
+program_status_3, assessments_date_3, phq_9_score_3, gad_7_score_3, 
+usda_score_3, need_1_mental_health_needs_3, need_2_medical_needs_3, 
+need_3_transportation_3, need_4_social_supports_3, need_5_housing_security_3, 
+need_6_food_insecurity_3, program_status_6, assessments_date_6, 
+phq_9_score_6, gad_7_score_6, usda_score_6, need_1_mental_health_needs_6, 
+need_2_medical_needs_6, need_3_transportation_6, need_4_social_supports_6, 
+need_5_housing_security_6, need_6_food_insecurity_6, program_status_9, 
+assessments_date_9, phq_9_score_9, gad_7_score_9, usda_score_9, 
+need_1_mental_health_needs_9, need_2_medical_needs_9, need_3_transportation_9, 
+need_4_social_supports_9, need_5_housing_security_9, need_6_food_insecurity_9, 
+program_status_12, assessments_date_12, phq_9_score_12, 
+gad_7_score_12, usda_score_12, need_1_mental_health_needs_12, 
+need_2_medical_needs_12, need_3_transportation_12, need_4_social_supports_12, 
+need_5_housing_security_12, need_6_food_insecurity_12)
+```
+
+```{r}
+measures_date <- measures %>% 
+  select(participant_id, assessments_date_0, assessments_date_3, assessments_date_6, assessments_date_9, assessments_date_12)
+
+measures_date_long <- measures_date %>% 
+  pivot_longer(
+    cols = starts_with("assessments_date"),
+    names_to = "timepoint",
+    names_prefix = "assessments_date_",
+    values_to = "assessments_date"
+  )
+
+measures_gad7_score <- measures %>% select(participant_id, contains("gad_7_score"))
+measures_gad7_score_long <- measures_gad7_score %>% 
+  pivot_longer(
+    cols         = starts_with("gad_7_score"),
+    names_to     = "timepoint",
+    names_prefix = "gad_7_score_",
+    values_to    = "gad7_score"
+  )
+rm(measures_gad7_score)
+
+
+measures_phq9_score <- measures %>% select(participant_id, contains("phq_9_score"))
+measures_phq9_score_long <- measures_phq9_score %>% 
+  pivot_longer(
+    cols         = starts_with("phq_9_score"),
+    names_to     = "timepoint",
+    names_prefix = "phq_9_score_",
+    values_to    = "phq9_score"
+  )
+rm(measures_phq9_score)
+
+measures_usda_score <- measures %>% select(participant_id, contains("usda_score"))
+measures_usda_score_long <- measures_usda_score %>% 
+  pivot_longer(
+    cols         = starts_with("usda_score"),
+    names_to     = "timepoint",
+    names_prefix = "usda_score_",
+    values_to    = "usda_score"
+  )
+rm(measures_usda_score)
+
+
+assessments <- measures_date_long %>% 
+  left_join(measures_gad7_score_long, by = c("participant_id"="participant_id", "timepoint"="timepoint")) %>% 
+  left_join(measures_phq9_score_long, by = c("participant_id"="participant_id", "timepoint"="timepoint")) %>%
+  left_join(measures_usda_score_long, by = c("participant_id"="participant_id", "timepoint"="timepoint"))
+
+rm(measures_date, measures_date_long, measures_gad7_score_long, measures_phq9_score_long, measures_usda_score_long)
+```
+
+```{r}
+needs_assessments_date <- measures %>% select(participant_id, needs_assessment_date_0, assessments_date_3, assessments_date_6, assessments_date_9, assessments_date_12) %>% 
+  rename(
+    needs_assessment_date_3   = assessments_date_3,
+    needs_assessment_date_6   = assessments_date_6,
+    needs_assessment_date_9   = assessments_date_9,
+    needs_assessment_date_12  = assessments_date_12
+  )
+
+needs_ass_date_long <- needs_assessments_date %>% 
+  pivot_longer(
+    cols         = starts_with("needs_assessment_date"),
+    names_to     = "timepoint",
+    names_prefix = "needs_assessment_date_",
+    values_to    = "needs_assessment_date"
+  )
+
+needs_ass_status <- measures %>% select(participant_id, contains("need_"))
+
+
+need1_yn <- needs_ass_status %>% select(participant_id, contains("need_1_mental_health_needs_"))
+need1_yn_long <- need1_yn %>% 
+  pivot_longer(
+    cols         = starts_with("need_1_mental_health_needs_"),
+    names_to     = "timepoint",
+    names_prefix = "need_1_mental_health_needs_",
+    values_to    = "need_mental_health"
+  )
+
+
+# need2 <- needs_ass_status %>% select(participant_id, contains("need_2"))
+need2_yn <- needs_ass_status %>% select(participant_id, contains("need_2_medical_needs_"))
+need2_yn_long <- need2_yn %>% 
+  pivot_longer(
+    cols         = starts_with("need_2_medical_needs_"),
+    names_to     = "timepoint",
+    names_prefix = "need_2_medical_needs_",
+    values_to    = "need_medical_needs"
+  )
+
+# need3 <- needs_ass_status %>% select(participant_id, contains("need_3"))
+need3_yn <- needs_ass_status %>% select(participant_id, contains("need_3_transportation_"))
+need3_yn_long <- need3_yn %>% 
+  pivot_longer(
+    cols         = starts_with("need_3_transportation_"),
+    names_to     = "timepoint",
+    names_prefix = "need_3_transportation_",
+    values_to    = "need_transportation"
+  )
+
+
+# need4 <- needs_ass_status %>% select(participant_id, contains("need_4"))
+need4_yn <- needs_ass_status %>% select(participant_id, contains("need_4_social_supports_"))
+need4_yn_long <- need4_yn %>% 
+  pivot_longer(
+    cols         = starts_with("need_4_social_supports_"),
+    names_to     = "timepoint",
+    names_prefix = "need_4_social_supports_",
+    values_to    = "need_social_supports"
+  )
+
+
+# need5 <- needs_ass_status %>% select(participant_id, contains("need_5"))
+need5_yn <- needs_ass_status %>% select(participant_id, contains("need_5_housing_security_"))
+need5_yn_long <- need5_yn %>% 
+  pivot_longer(
+    cols         = starts_with("need_5_housing_security_"),
+    names_to     = "timepoint",
+    names_prefix = "need_5_housing_security_",
+    values_to    = "need_housing_security"
+  )
+
+
+# need6 <- needs_ass_status %>% select(participant_id, contains("need_6"))
+need6_yn <- needs_ass_status %>% select(participant_id, contains("need_6_food_insecurity_"))
+need6_yn_long <- need6_yn %>% 
+  pivot_longer(
+    cols         = starts_with("need_6_food_insecurity_"),
+    names_to     = "timepoint",
+    names_prefix = "need_6_food_insecurity_",
+    values_to    = "need_food_security"
+  )
+
+needs_assessment <- needs_ass_date_long %>% 
+  left_join(need1_yn_long, by = c("participant_id"="participant_id", "timepoint"="timepoint")) %>%
+  left_join(need2_yn_long, by = c("participant_id"="participant_id", "timepoint"="timepoint")) %>%
+  left_join(need3_yn_long, by = c("participant_id"="participant_id", "timepoint"="timepoint")) %>% 
+  left_join(need4_yn_long, by = c("participant_id"="participant_id", "timepoint"="timepoint")) %>% 
+  left_join(need5_yn_long, by = c("participant_id"="participant_id", "timepoint"="timepoint")) %>% 
+  left_join(need6_yn_long, by = c("participant_id"="participant_id", "timepoint"="timepoint"))
+
+rm(needs_assessments_date, needs_ass_status, needs_ass_date_long, need1_yn, need1_yn_long, need2_yn, need2_yn_long, need3_yn, need3_yn_long,  need4_yn, need4_yn_long,  need5_yn, need5_yn_long, need6_yn, need6_yn_long, n_occur )
+```
+
+```{r}
+program_status <- measures %>% select(participant_id, contains("program_status"))
+
+program_status <- program_status %>%
+  pivot_longer(
+    cols         = starts_with("program_status"),
+    names_to     = "timepoint",
+    names_prefix = "program_status_",
+    values_to    = "program_status"
+  )
+```
+
+
+```{r}
+# long datasets
+readr::write_csv(demo, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/LifePath Systems/Analysis/Steph/long datasets/q2/q2_beyondblue_demo_09152021.csv")
+
+readr::write_csv(program_status, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/LifePath Systems/Analysis/Steph/long datasets/q2/q2_beyondblue_program_status_09152021.csv")
+
+readr::write_csv(needs_assessment, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/LifePath Systems/Analysis/Steph/long datasets/q2/q2_beyondblue_needs_assessment_09152021.csv")
+
+readr::write_csv(referrals, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/LifePath Systems/Analysis/Steph/long datasets/q2/q2_beyondblue_referrals_09152021.csv")
+
+readr::write_csv(assessments, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/LifePath Systems/Analysis/Steph/long datasets/q2/q2_beyondblue_assessments_09152021.csv")
+```
+
+
+
+
+
+
+
+
+
+
+# Referrals dataset
+
+```{r}
+referrals <- referrals %>% rename(
+  participant_id        = client_client_number,
+  referred_from         = referring_from_bb_agency ,
+  referred_to           = referring_to_bb_agency,
+  referral_reason       = interagency_referral_reason,
+  service_type          = bb_service_type ,
+  outside_referral      = non_bb_agency_referral_1,
+  service_location      = bb_service_location,
+  referral_date = date_of_service) %>% 
+  select(participant_id, referral_date, referred_from, referred_to, referral_reason, service_type, outside_referral, service_location)
+```
+
+```{r}
+# order by ID and date
+referrals <- referrals[order(referrals$participant_id, referrals$referral_date), ] # 122 obs
+```
+
+```{r}
+referrals <- referrals[!is.na(referrals$participant_id),]
+```
+
+```{r}
+referrals <- referrals %>%
+  separate_rows(referral_reason, sep="; ")
+```
+
+```{r}
+# readr::write_csv(main, "/Users/cyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/LifePath Systems/Analysis/Steph/q1_datasets/q1_beyondblue_main.csv")
+
+# main <- read_csv("/Users/cyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/LifePath Systems/Analysis/Steph/q1_datasets/q1_beyondblue_main.csv")
+```
+
+
+# Descriptive statistics for referrals dataset
+
+* all clients are referred from either lifepath, community health clinic, wellness center for older adults, or hope clinic
+
+```{r}
+unique(referrals$referred_from)
+```
+
+
+* all clients were referred to either community lifeline center, hope clinic, community health clinic, wellness center for older adults, or life path
+
+```{r}
+unique(referrals$referred_to)
+```
+
+* reasons for referral include food insecuriy, mental health services, counseling, transportation, healthcare, socialization, healthcare; mental health services, counseling; healthcare, counselin; healthcare; mental health services, or counseling; education class
+
+```{r}
+unique(referrals$referral_reason)
+```
+
+* there are only two types of services: partner agency referral/ referral to non-nn agency
+
+```{r}
+unique(referrals$service_type)
+```
+
+* service locations include lifepath system, wcoa, hope clinic, chc, and client's home
+
+```{r}
+unique(referrals$service_location)
+```
+
+
+# Create dummy variables for referrals dataset
+```{r}
+referrals_test <- referrals %>%
+  fastDummies::dummy_cols(select_columns = "referred_from", ignore_na = TRUE, remove_selected_columns = TRUE) %>% 
+  fastDummies::dummy_cols(select_columns = "referred_to", ignore_na = TRUE, remove_selected_columns = TRUE) %>% 
+  fastDummies::dummy_cols(select_columns = "referral_reason", ignore_na = TRUE, remove_selected_columns = TRUE) %>% 
+  fastDummies::dummy_cols(select_columns = "service_type", ignore_na = TRUE, remove_selected_columns = TRUE) %>% 
+  fastDummies::dummy_cols(select_columns = "outside_referral", ignore_na = TRUE, remove_selected_columns = TRUE) %>% 
+  fastDummies::dummy_cols(select_columns = "service_location", ignore_na = TRUE, remove_selected_columns = TRUE)
+```
+
+```{r}
+referrals_test <- clean_names(referrals_test)
+```
+
+```{r}
+referrals_test_01 <- referrals_test %>% 
+  group_by(participant_id) %>% 
+  mutate(
+    referred_from_community_health_clinic = 
+      ifelse(!all(is.na(referred_from_community_health_clinic)), 
+             max(referred_from_community_health_clinic, na.rm=T), NA),
+    referred_from_hope_clinic = 
+      ifelse(!all(is.na(referred_from_hope_clinic)), 
+             max(referred_from_hope_clinic, na.rm=T), NA), 
+    referred_from_lifepath = 
+      ifelse(!all(is.na(referred_from_lifepath)), 
+             max(referred_from_lifepath, na.rm=T), NA), 
+    referred_from_wellness_center_for_older_adults = 
+      ifelse(!all(is.na(referred_from_wellness_center_for_older_adults)), 
+             max(referred_from_wellness_center_for_older_adults, na.rm=T), NA),
+    referred_to_community_health_clinic = 
+      ifelse(!all(is.na(referred_to_community_health_clinic)), 
+             max(referred_to_community_health_clinic, na.rm=T), NA),
+    referred_to_community_lifeline_center = 
+      ifelse(!all(is.na(referred_to_community_lifeline_center)), 
+             max(referred_to_community_lifeline_center, na.rm=T), NA), 
+    referred_to_hope_clinic =
+      ifelse(!all(is.na(referred_to_hope_clinic)), 
+             max(referred_to_hope_clinic, na.rm=T), NA), 
+    referred_to_lifepath = 
+      ifelse(!all(is.na(referred_to_lifepath)), 
+             max(referred_to_lifepath, na.rm=T), NA),
+    referred_to_wellness_center_for_older_adults = 
+      ifelse(!all(is.na(referred_to_wellness_center_for_older_adults)), 
+             max(referred_to_wellness_center_for_older_adults, na.rm=T), NA), 
+    referral_reason_counseling =
+      ifelse(!all(is.na(referral_reason_counseling)), 
+             max(referral_reason_counseling, na.rm=T), NA), 
+    referral_reason_education_class = 
+      ifelse(!all(is.na(referral_reason_education_class)), 
+             max(referral_reason_education_class, na.rm=T), NA), 
+    referral_reason_food_insecurity = 
+      ifelse(!all(is.na(referral_reason_food_insecurity)), 
+             max(referral_reason_food_insecurity, na.rm=T), NA), 
+    referral_reason_healthcare = 
+      ifelse(!all(is.na(referral_reason_healthcare)), 
+             max(referral_reason_healthcare, na.rm=T), NA), 
+    referral_reason_mental_health_services = 
+      ifelse(!all(is.na(referral_reason_mental_health_services)), 
+             max(referral_reason_mental_health_services, na.rm=T), NA),
+    referral_reason_socialization = 
+      ifelse(!all(is.na(referral_reason_socialization)), 
+             max(referral_reason_socialization, na.rm=T), NA), 
+    referral_reason_transportation = 
+      ifelse(!all(is.na(referral_reason_transportation)), 
+             max(referral_reason_transportation, na.rm=T), NA), 
+    service_type_partner_agency_referral = 
+      ifelse(!all(is.na(service_type_partner_agency_referral)), 
+             max(service_type_partner_agency_referral, na.rm=T), NA),
+    service_type_referral_to_non_bb_agency = 
+      ifelse(!all(is.na(service_type_referral_to_non_bb_agency)), 
+             max(service_type_referral_to_non_bb_agency, na.rm=T), NA),
+    outside_referral_clc_non_bb_services = 
+      ifelse(!all(is.na(outside_referral_clc_non_bb_services)), 
+             max(outside_referral_clc_non_bb_services, na.rm=T), NA),
+    outside_referral_collin_college_dental_hygiene_clinic = 
+      ifelse(!all(is.na(outside_referral_collin_college_dental_hygiene_clinic)),
+             max(outside_referral_collin_college_dental_hygiene_clinic, na.rm=T), NA), 
+    outside_referral_community_dental_care = 
+      ifelse(!all(is.na(outside_referral_community_dental_care)), 
+             max(outside_referral_community_dental_care, na.rm=T), NA),
+    outside_referral_texoma_council_of_governments = 
+      ifelse(!all(is.na(outside_referral_texoma_council_of_governments)), 
+             max(outside_referral_texoma_council_of_governments, na.rm=T), NA), 
+    outside_referral_wcoa_non_bb_services = 
+      ifelse(!all(is.na(outside_referral_wcoa_non_bb_services)), 
+             max(outside_referral_wcoa_non_bb_services, na.rm=T), NA), 
+    service_location_chc = 
+      ifelse(!all(is.na(service_location_chc)), 
+             max(service_location_chc, na.rm=T), NA), 
+    service_location_clients_home =
+      ifelse(!all(is.na(service_location_clients_home)), 
+             max(service_location_clients_home, na.rm=T), NA), 
+    service_location_hope_clinic =
+      ifelse(!all(is.na(service_location_hope_clinic)), 
+             max(service_location_hope_clinic, na.rm=T), NA), 
+    service_location_lifepath_systems = 
+      ifelse(!all(is.na(service_location_lifepath_systems)), 
+             max(service_location_lifepath_systems, na.rm=T), NA), 
+    service_location_wcoa = 
+      ifelse(!all(is.na(service_location_wcoa)), 
+             max(service_location_wcoa, na.rm=T), NA)) %>%
+  ungroup()
+```
+
+```{r}
+referrals <- referrals_test_01 %>% 
+  group_by(participant_id, referral_date) %>% 
+  mutate(visit=row_number()) %>% ungroup() %>% 
+  select(participant_id, referral_date, visit, everything())
+
+referrals_unique <- referrals %>% filter(visit==1)
+
+referrals <- referrals_unique %>% select(-c(visit)) %>%  group_by(participant_id) %>%
+  mutate(visit=row_number()) %>% ungroup() %>% 
+  select(participant_id, referral_date, visit, everything())
+```
+
+# Restructure referrals dataset from long to wide
+
+```{r}
+referrals_wide <- referrals %>%
+  pivot_wider(
+    names_from = "visit",
+    names_sep = "_",
+    values_from = c(referral_date))
+```
+
+```{r}
+q1_beyond_blue_wide <- main %>%
+  left_join(referrals_wide, by = c("participant_id" = "participant_id"))
+```
+
+```{r}
+q1_beyond_blue_wide <- q1_beyond_blue_wide[colSums(!is.na(q1_beyond_blue_wide)) > 0] 
+```
+
+```{r}
+# readr::write_csv(referrals, "/Users/cyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/LifePath Systems/Analysis/Steph/q1_datasets/q1_beyondblue_referrals.csv")
+
+# readr::write_csv(referrals_wide, "/Users/cyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/LifePath Systems/Analysis/Steph/q1_datasets/q1_beyondblue_referrals_wide.csv")
+```
+
+```{r}
+# referrals <- read_csv("/Users/cyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/LifePath Systems/Analysis/Steph/q1_datasets/q1_beyondblue_referrals.csv")
+```
+

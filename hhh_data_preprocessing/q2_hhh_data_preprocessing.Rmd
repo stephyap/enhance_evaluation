@@ -1,0 +1,611 @@
+---
+title: "Q2 - Project HHH Data Preprocessing"
+---
+
+## Install and load packates
+
+```{r message=FALSE}
+library(dplyr)
+library(tidyr)
+library(readr)
+library(readxl)
+library(ggplot2)
+library(purrr)
+library(stringr)
+library(naniar)
+library(janitor)
+library(lubridate)
+```
+
+
+## Import datasets for merging
+
+```{r}
+demo <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Data/2021-09-10/THR Evaluation Team Version Evaluation Data Collection Plan-TarrantParker-Project HHH August 2021.xlsx", sheet=2)
+
+usda <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Data/2021-09-10/USDA March-August 2021.xlsx")
+
+gse <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Data/2021-09-10/GSE March-Augus 2021.xlsx")
+
+grocery <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Data/2021-09-10/Grocery Log March-August 2021.xlsx")
+
+sh_voucher <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Data/2021-09-10/Safe Harbor Vouchers March-August 2021.xlsx")
+
+steps <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Data/2021-09-10/STEPS Class Attenance March-August 2021.xlsx")
+
+aggregate <- readxl::read_xlsx("/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Data/2021-09-10/THR Evaluation Team Version Evaluation Data Collection Plan-TarrantParker-Project HHH August 2021.xlsx", sheet=3)
+```
+
+```{r}
+demo <- demo %>% 
+  mutate(
+    across(
+      .cols = where(is.character), 
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  )
+
+usda <- usda %>% 
+  mutate(
+    across(
+      .cols = where(is.character), 
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  )
+
+gse <- gse %>% 
+  mutate(
+    across(
+      .cols = where(is.character),
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  ) 
+
+
+grocery <- grocery %>% 
+  mutate(
+    across(
+      .cols = where(is.character),
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  ) 
+
+
+sh_voucher <- sh_voucher %>% 
+  mutate(
+    across(
+      .cols = where(is.character),
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  ) 
+
+
+steps <- steps %>% 
+  mutate(
+    across(
+      .cols = where(is.character),
+      function(x) {
+        x <- str_to_lower(x) # Make lowercase
+        x <- str_trim(x) # Remove leading and trailing spaces
+        x <- str_replace_all(x, "[[:blank:]]{2,}", " ") # Remove double spaces
+      }
+    )
+  )
+
+na_strings <- c("n/a") # can add more if found
+
+demo <- clean_names(demo)
+grocery <- clean_names(grocery) %>% rename(participant_id = subject_id) %>% naniar::replace_with_na_all(condition= ~.x %in% na_strings)
+gse <- clean_names(gse) %>% rename(participant_id = subject_id) %>% naniar::replace_with_na_all(condition= ~.x %in% na_strings)
+sh_voucher <- clean_names(sh_voucher) %>% rename(participant_id = subject_id) %>% naniar::replace_with_na_all(condition= ~.x %in% na_strings) 
+steps <- clean_names(steps) %>% rename(participant_id = subject_id) %>% naniar::replace_with_na_all(condition= ~.x %in% na_strings)
+usda <- clean_names(usda) %>% rename(participant_id = subject_id) %>% naniar::replace_with_na_all(condition= ~.x %in% na_strings)
+```
+
+
+
+## View datasets
+```{r}
+# remove columns contain PIH (clients' names and zipcode) and unnecessary columns 
+demo <- demo %>% select(-c(starts_with("need_")))
+demo$referred_steps[demo$participant_id=="39241"] <- "yes"
+demo <- demo %>% select(-c(starts_with("needs")))
+usda <- usda %>% select(-c(touch_point_name, subject_type, a_9_total_score))
+gse <- gse %>% select(-c(touch_point_name, subject_type, c_1_total_score ))
+grocery <- grocery %>% select(-c(touch_point_name, subject_type))
+sh_voucher <- sh_voucher %>% select(-c(touch_point_name, subject_type))
+steps <- steps %>% select(-c(touch_point_name, subject_type))
+```
+
+```{r}
+# show duplicated subject id from the demographics tables
+n_occur <- data.frame(table(demo$participant_id))
+n_occur[n_occur$Freq > 1,] #tells you which ids occurred more than once.
+demo[demo$participant_id %in% n_occur$Var1[n_occur$Freq > 1],]
+
+# delete columns that contain all NAs
+# demo <- demo[colSums(!is.na(demo)) > 0]
+# usda <- usda[colSums(!is.na(usda)) > 0]
+# gse <- gse[colSums(!is.na(gse)) > 0]
+# sh_voucher <- sh_voucher[colSums(!is.na(sh_voucher)) > 0]
+# steps <- steps[colSums(!is.na(steps)) > 0]
+# grocery <- grocery[colSums(!is.na(grocery)) > 0]
+```
+
+```{r}
+dput(as.character(colnames(grocery)))
+```
+
+```{r}
+# rename & rearrange columns in usda
+usda <- usda %>% mutate(
+  usda_hh3 = a_2_hh3_the_food_that_i_we_bought_just_didnt_last_and_i_we_didnt_have_money_to_get_more_was_that_often_sometimes_or_never_true_for_you_your_household_in_the_last_12_months,
+  usda_hh4 = a_3_hh4_i_we_couldnt_afford_to_eat_balanced_meals_was_that_often_sometimes_or_never_true_for_you_your_household_in_the_last_12_months,
+  usda_ad1 = a_4_ad1_in_the_last_12_months_did_you_or_other_adults_in_your_household_ever_cut_the_size_of_your_meals_or_skip_meals_because_there_wasnt_enough_money_for_food,
+  usda_ad1a = a_6_ad1a_if_yes_above_ask_how_often_did_this_happen_almost_every_month_some_months_but_not_every_month_or_in_only_1_or_2_months,
+  usda_ad2 = a_7_ada2_in_the_last_12_months_did_you_ever_eat_less_than_you_felt_you_should_because_there_wasnt_enough_money_for_food,
+  usda_ad3 = a_8_ad3_in_the_last_12_months_were_you_ever_hungry_but_didnt_eat_because_there_wasnt_enough_money_for_food,
+  usda_site = site,
+  usda_response_date = response_date
+) %>% select(participant_id, usda_response_date, usda_site, usda_hh3, usda_hh4, usda_ad1, usda_ad1a, usda_ad2, usda_ad3 )
+
+# rename & rearrange columns in gse
+gse <- gse %>% mutate(
+  gse_site = site,
+  gse_response_date = response_date,
+  gse_1  = b_1_i_can_always_manage_to_solve_difficult_problems_if_i_try_hard_enough,
+  gse_2  = b_2_if_someone_opposes_me_i_can_find_the_means_and_ways_to_get_what_i_want, 
+  gse_3  = b_3_it_is_easy_for_me_to_stick_to_my_aims_and_accomplish_my_goals,
+  gse_4  = b_4_i_am_confident_that_i_could_deal_efficiently_with_unexpected_events,
+  gse_5  = b_5_thanks_to_my_resourcefulness_i_know_how_to_handle_unforeseen_situaitons,
+  gse_6  = b_6_i_can_solve_most_problems_if_i_invest_the_necessary_effor,
+  gse_7  = b_7_i_can_remain_calm_when_facing_difficulties_because_i_can_rely_on_my_coping_abilities,
+  gse_8  = b_8_when_i_am_confronted_with_a_problem_i_can_usually_find_several_solutions,
+  gse_9  = b_9_if_i_am_in_trouble_i_can_usually_think_of_a_solution,
+  gse_10 = b_10_i_can_usually_handle_whatever_comes_my_way
+) %>% select(participant_id, gse_response_date, gse_site, gse_1, gse_2, gse_3, gse_4, gse_5, gse_6, gse_7, gse_8, gse_9, gse_10)
+
+
+# rename & rearrange columns in grocery
+grocery <- grocery %>% mutate(
+  grocery_site = site,
+  grocery_response_date = response_date,
+  grocery_location_of_service = a_3_location_of_service,
+  household_size = a_5_household_size,
+  household_grocery_value = a_6_grocery_value_calculated_by_household_size_see_dollar_values_in_the_message_above
+) %>% select(participant_id, grocery_site, grocery_response_date, grocery_location_of_service, household_size, household_grocery_value)
+
+
+# rename & rearrange columns in steps
+steps <- steps %>% mutate(
+  steps_program = program,
+  steps_response_date = response_date,
+  steps_location_of_service = a_2_location_of_service,
+  steps_attendance = a_3_attendance,
+  steps_time_spent = a_4_time_spent,
+  steps_activity = a_5_activity
+) %>% select(participant_id, steps_program, steps_response_date, steps_location_of_service, steps_attendance, steps_time_spent, steps_activity)
+
+
+# rename & rearrange columns in sh_voucher
+sh_voucher <- sh_voucher %>% mutate(
+  sh_voucher_site = site,
+  sh_voucher_response_date = response_date,
+  sh_voucher_location_of_service = a_2_location_of_service,
+  sh_voucher_number = c_1_voucher_number,
+  sh_voucher_only_not_fulfilled_pledge = c_2_is_this_a_voucher_only_not_the_result_of_a_fulfilled_pledge,
+  sh_voucher_vendor_info = d_1_vendor_information,
+  sh_voucher_vendor_contact_method = d_3_who_was_the_contact_at_the_vendor,
+  sh_voucher_reason = d_4_reason_for_voucher,
+  sh_voucher_bill_amount = e_1_total_amount_of_bill_must_attach_copy_of_bill,
+  sh_voucher_coh_pays = e_5_amount_center_of_hope_commits_to_pay,
+  sh_voucher_other_resources = f_8_if_other_resources_are_utilized_in_e_7_above_list_them_here,
+  sh_voucher_special_instruction = f_9_special_instructions,
+  sh_voucher_approved_by = f_13_approved_by,
+  sh_voucher_date_processed = g_1_date_processed,
+  sh_voucher_check_num = g_2_check_number,
+  sh_voucher_follow_notes = g_5_follow_up_notes
+) %>% select(participant_id, sh_voucher_site, sh_voucher_response_date, sh_voucher_location_of_service, sh_voucher_number, sh_voucher_only_not_fulfilled_pledge, sh_voucher_vendor_info, sh_voucher_vendor_contact_method, sh_voucher_reason, sh_voucher_bill_amount, sh_voucher_coh_pays, sh_voucher_other_resources, sh_voucher_special_instruction, sh_voucher_approved_by, sh_voucher_date_processed, sh_voucher_check_num, sh_voucher_follow_notes)
+```
+
+```{r}
+# order by ID and date
+demo <- demo[order(demo$participant_id, demo$initial_intake_date), ] # 137 records 
+usda <- usda[order(usda$participant_id, usda$usda_response_date), ] # 128 records 
+gse <- gse[order(gse$participant_id, gse$gse_response_date), ] # 86 records
+grocery <- grocery[order(grocery$participant_id, grocery$grocery_response_date), ] # 257 records
+sh_voucher <- sh_voucher[order(sh_voucher$participant_id, sh_voucher$sh_voucher_response_date), ] # 27 records
+steps <- steps[order(steps$participant_id, steps$steps_response_date), ] # 4 records
+
+# delete rows if participant ID is NA
+demo <- demo[!is.na(demo$`participant_id`),]
+usda <- usda[!is.na(usda$participant_id),]
+gse <- gse[!is.na(gse$participant_id),]
+grocery <- grocery[!is.na(grocery$participant_id),]
+sh_voucher <- sh_voucher[!is.na(sh_voucher$participant_id),]
+steps <- steps[!is.na(steps$participant_id),]
+```
+
+
+## Merge everything to the demographics main datasets (wide) and convert to the long version for longitudinal analysis (long) - both versions will be available
+
+```{r}
+# using replace_with_na_all to replace ALL values that meet a condition across an entire dataset. 
+na_strings <- c("n/a") # can add more if found
+
+demo <- demo %>% naniar::replace_with_na_all(condition= ~.x %in% na_strings)
+  
+# create row number for datasets that have duplicated IDs
+usda <- usda %>% group_by(participant_id) %>% mutate(visit=row_number()) %>% ungroup() %>%
+  # mutate(usda_mnth_year = format(usda_response_date, format = "%B, %Y")) %>% 
+  select(participant_id, visit, usda_response_date, everything())
+usda <- usda %>% naniar::replace_with_na_all(condition= ~.x %in% na_strings)
+
+gse <- gse %>% group_by(participant_id) %>% mutate(visit=row_number()) %>% ungroup() %>% 
+  # mutate(gse_mnth_year = format(gse_response_date, format = "%B, %Y")) %>%
+  select(participant_id, visit, gse_response_date, everything())
+gse <- gse %>% naniar::replace_with_na_all(condition= ~.x %in% na_strings)
+
+grocery <- grocery %>% group_by(participant_id) %>% mutate(visit=row_number()) %>% ungroup() %>% 
+  # mutate(grocery_mnth_year = format(grocery_response_date, format = "%B, %Y")) %>%
+  select(participant_id, visit, grocery_response_date, everything())
+grocery <- grocery %>% naniar::replace_with_na_all(condition= ~.x %in% na_strings)
+
+sh_voucher <- sh_voucher %>% group_by(participant_id) %>% mutate(visit=row_number()) %>% ungroup() %>%
+  # mutate(sh_voucher_mnth_year = format(sh_voucher_response_date, format = "%B, %Y")) %>%
+  select(participant_id, visit, sh_voucher_response_date, everything())
+sh_voucher <- sh_voucher %>% naniar::replace_with_na_all(condition= ~.x %in% na_strings)
+
+steps <- steps %>% group_by(participant_id) %>% mutate(visit=row_number()) %>% ungroup() %>% 
+  # mutate(steps_mnth_year = format(steps_response_date, format = "%B, %Y")) %>%
+  select(participant_id, visit, steps_response_date, everything())
+steps <- steps %>% naniar::replace_with_na_all(condition= ~.x %in% na_strings)
+```
+
+```{r}
+job_training <- demo %>% filter(enrolled_jt =="yes") %>% select(participant_id, enrollment_date_job_training, contains("jt")) %>% select(participant_id, enrollment_date_job_training, everything()) %>% select(-c(enrolled_jt))
+# gse_date_jt_0, gse_score_jt_0, gse_date_jt_3, gse_score_jt_3, gse_date_jt_6, gse_score_jt_6, gse_date_jt_9, gse_score_jt_9, gse_date_jt_12, gse_score_jt_12) %>% 
+  # mutate(job_training_mnth_year = format(enrollment_date_job_training, format = "%B, %Y")) %>%
+  
+
+jt_score <- job_training %>% select(participant_id, enrollment_date_job_training, contains("gse_score_jt"))
+jt_score_long <- jt_score %>% 
+  pivot_longer(
+    cols         = starts_with("gse_score"),
+    names_to     = "timepoint",
+    names_prefix = "gse_score_jt_",
+    values_to    = "score"
+  )
+jt_date <- job_training %>% select(participant_id, enrollment_date_job_training,  contains("gse_date_jt"))
+jt_date_long <- jt_date %>% 
+  pivot_longer(
+    cols         = starts_with("gse_date"),
+    names_to     = "timepoint",
+    names_prefix = "gse_date_jt_",
+    values_to    = "date"
+  )
+
+job_training <- jt_score_long %>% 
+  left_join(jt_date_long, by = c("participant_id"="participant_id", "enrollment_date_job_training" ="enrollment_date_job_training", "timepoint"="timepoint"))
+
+rm(jt_date, jt_date_long, jt_score, jt_score_long)
+```
+
+```{r}
+safe_harbor <- demo %>% filter(referred_sh =="yes") %>% select(participant_id, referral_date_sh, 
+enrollment_date_sh, phq_9_date_sh_0, phq_9_score_sh_0, gad_7_date_sh_0, gad_7_score_sh_0, phq_9_date_sh_3, phq_9_score_sh_3, gad_7_date_sh_3, gad_7_score_sh_3, phq_9_date_sh_6, phq_9_score_sh_6, gad_7_date_sh_6, gad_7_score_sh_6, phq_9_date_sh_9, phq_9_score_sh_9, gad_7_date_sh_9, gad_7_score_sh_9, phq_9_date_sh_12, phq_9_score_sh_12, gad_7_date_sh_12, gad_7_score_sh_12) %>% 
+  # mutate(sh_mnth_year = format(enrollment_date_sh, format = "%B, %Y")) %>%
+  select(participant_id, enrollment_date_sh, everything())
+
+# phq_9
+safe_harbor_phq9_score <- safe_harbor %>% select(participant_id, enrollment_date_sh, referral_date_sh, contains("phq_9_score_sh_"))
+safe_harbor_phq9_score_long <- safe_harbor_phq9_score %>% 
+  pivot_longer(
+    cols         = starts_with("phq_9_score_sh_"),
+    names_to     = "timepoint",
+    names_prefix = "phq_9_score_sh_",
+    values_to    = "phq9_score"
+  )
+safe_harbor_phq9_date <- safe_harbor %>% select(participant_id, enrollment_date_sh, referral_date_sh, contains("phq_9_date_sh_"))
+safe_harbor_phq9_date_long <- safe_harbor_phq9_date %>% 
+  pivot_longer(
+    cols         = starts_with("phq_9_date_sh_"),
+    names_to     = "timepoint",
+    names_prefix = "phq_9_date_sh_",
+    values_to    = "phq9_date"
+  )
+
+# gad-7
+safe_harbor_gad7_score <- safe_harbor %>% select(participant_id, enrollment_date_sh, referral_date_sh, contains("gad_7_score_sh_"))
+safe_harbor_gad7_score_long <- safe_harbor_gad7_score %>% 
+  pivot_longer(
+    cols         = starts_with("gad_7_score_sh_"),
+    names_to     = "timepoint",
+    names_prefix = "gad_7_score_sh_",
+    values_to    = "gad7_score"
+  )
+safe_harbor_gad7_date <- safe_harbor %>% select(participant_id, enrollment_date_sh, referral_date_sh, contains("gad_7_date_sh_"))
+safe_harbor_gad7_date_long <- safe_harbor_gad7_date %>% 
+  pivot_longer(
+    cols         = starts_with("gad_7_date_sh_"),
+    names_to     = "timepoint",
+    names_prefix = "gad_7_date_sh_",
+    values_to    = "gad7_date"
+  )
+
+
+safe_harbor <- safe_harbor_phq9_score_long %>% 
+  left_join(safe_harbor_phq9_date_long, by = c('participant_id'='participant_id', 'enrollment_date_sh', 'referral_date_sh' = 'referral_date_sh', 'timepoint'='timepoint')) %>% 
+  left_join(safe_harbor_gad7_score_long, by = c('participant_id'='participant_id', 'enrollment_date_sh', 'referral_date_sh' = 'referral_date_sh', 'timepoint'='timepoint')) %>% 
+  left_join(safe_harbor_gad7_date_long, by = c('participant_id'='participant_id', 'enrollment_date_sh', 'referral_date_sh' = 'referral_date_sh', 'timepoint'='timepoint'))
+
+rm(safe_harbor_phq9_score_long, safe_harbor_phq9_date_long, safe_harbor_gad7_score_long, safe_harbor_gad7_date_long, safe_harbor_phq9_score, safe_harbor_phq9_date, safe_harbor_gad7_score, safe_harbor_gad7_date)
+```
+
+```{r}
+food_security <- demo %>% filter(referred_fs =="yes") %>% select(participant_id, referral_date_fs, usda_date_fs_0, usda_score_fs_0, usda_date_fs_3, usda_score_fs_3, usda_date_fs_6, usda_score_fs_6, usda_date_fs_9, usda_score_fs_9, usda_date_fs_12, usda_score_fs_12)
+
+food_security_score <- food_security %>% select(participant_id, referral_date_fs, contains("usda_score_fs"))
+food_security_score_long <- food_security_score %>% 
+  pivot_longer(
+    cols         = starts_with("usda_score_fs"),
+    names_to     = "timepoint",
+    names_prefix = "usda_score_fs_",
+    values_to    = "score"
+  )
+food_security_date <- food_security %>% select(participant_id, referral_date_fs, contains("usda_date_fs"))
+food_security_date_long <- food_security_date %>% 
+  pivot_longer(
+    cols         = starts_with("usda_date_fs"),
+    names_to     = "timepoint",
+    names_prefix = "usda_date_fs_",
+    values_to    = "date"
+  )
+
+food_security <- food_security_score_long %>% 
+  left_join(food_security_date_long, by = c('participant_id'='participant_id', 'referral_date_fs' = 'referral_date_fs', 'timepoint'='timepoint'))
+
+rm(food_security_date, food_security_date_long, food_security_score, food_security_score_long)
+```
+
+```{r}
+calm <- demo %>% filter(enrolled_calm == "yes") %>% select(participant_id, enrollment_date_calm, phq_9_date_calm_pre, phq_9_score_calm_pre, phq_9_date_calm_post, phq_9_score_calm_post, gad_7_date_calm_pre, gad_7_score_calm_pre, gad_7_date_calm_post, gad_7_score_calm_post, gse_date_calm_pre, gse_score_calm_pre, gse_date_calm_post, gse_score_calm_post) 
+
+calm_score <- calm %>% select(participant_id, enrollment_date_calm, contains("phq_9_score_calm"))
+calm_score_long <- calm_score %>% 
+  pivot_longer(
+    cols         = starts_with("phq_9_score_calm_"),
+    names_to     = "timepoint",
+    names_prefix = "phq_9_score_calm_",
+    values_to    = "score"
+  )
+calm_date <- calm %>% select(participant_id, enrollment_date_calm, contains("phq_9_date_calm"))
+calm_date_long <- calm_date %>% 
+  pivot_longer(
+    cols         = starts_with("phq_9_date_calm_"),
+    names_to     = "timepoint",
+    names_prefix = "phq_9_date_calm_",
+    values_to    = "date"
+  )
+
+calm <- calm_score_long %>% 
+  left_join(calm_date_long, by = c("participant_id"="participant_id", "timepoint"="timepoint", "enrollment_date_calm"="enrollment_date_calm"))
+
+rm(calm_date, calm_date_long, calm_score, calm_score_long)
+```
+
+
+```{r}
+steps <- demo %>% filter(referred_steps == "yes") %>% select(
+  participant_id, enrollment_date_steps, gse_date_steps_0, 
+  gse_score_steps_0, gse_date_steps_3, gse_score_steps_3, 
+  gse_date_steps_6, gse_score_steps_6, gse_date_steps_9, 
+  gse_score_steps_9, gse_date_steps_12, gse_score_steps_12)
+
+steps$gse_date_steps_0 <- as.Date(steps$gse_date_steps_0)
+steps$gse_date_steps_3 <- as.Date(steps$gse_date_steps_3)
+steps$gse_date_steps_6 <- as.Date(steps$gse_date_steps_6)
+steps$gse_date_steps_9 <- as.Date(steps$gse_date_steps_9)
+steps$gse_date_steps_12 <- as.Date(steps$gse_date_steps_12)
+steps$gse_score_steps_0 <- as.integer(steps$gse_score_steps_0)
+steps$gse_score_steps_3 <- as.integer(steps$gse_score_steps_3)
+steps$gse_score_steps_6 <- as.integer(steps$gse_score_steps_6)
+steps$gse_score_steps_9 <- as.integer(steps$gse_score_steps_9)
+steps$gse_score_steps_12 <- as.integer(steps$gse_score_steps_12)
+
+steps_gse_score <- steps %>% select(participant_id, enrollment_date_steps, contains("gse_score_steps"))
+steps_gse_score_long <- steps_gse_score %>% 
+  pivot_longer(
+    cols         = starts_with("gse_score_steps_"),
+    names_to     = "timepoint",
+    names_prefix = "gse_score_steps_",
+    values_to    = "gse_score"
+  )
+steps_gse_date <- steps %>% select(participant_id, enrollment_date_steps, contains("gse_date_steps"))
+steps_gse_date_long <- steps_gse_date %>% 
+  pivot_longer(
+    cols         = starts_with("gse_date_steps_"),
+    names_to     = "timepoint",
+    names_prefix = "gse_date_steps_",
+    values_to    = "gse_date"
+  )
+
+steps <- steps_gse_score_long %>% 
+  left_join(steps_gse_date_long, by = c("participant_id"="participant_id", "timepoint"="timepoint", "enrollment_date_steps"="enrollment_date_steps"))
+
+rm(steps_gse_score, steps_gse_date, steps_gse_score_long, steps_gse_date_long)
+```
+
+
+```{r}
+program_status <- demo %>% select(participant_id, contains("program_status"))
+
+program_status <- program_status %>% 
+  pivot_longer(
+    cols         = starts_with("program_status_"),
+    names_to     = "timepoint",
+    names_prefix = "program_status_",
+    values_to    = "program_status"
+  )
+```
+
+```{r}
+demo <- demo %>% select(-c(gse_date_jt_0, gse_score_jt_0, gse_date_jt_3, gse_score_jt_3, gse_date_jt_6, gse_score_jt_6, gse_date_jt_9, gse_score_jt_9, gse_date_jt_12, gse_score_jt_12, phq_9_date_sh_0, phq_9_score_sh_0, gad_7_date_sh_0, gad_7_score_sh_0, phq_9_date_sh_3, phq_9_score_sh_3, gad_7_date_sh_3, gad_7_score_sh_3, phq_9_date_sh_6, phq_9_score_sh_6, gad_7_date_sh_6, gad_7_score_sh_6, phq_9_date_sh_9, phq_9_score_sh_9, gad_7_date_sh_9, gad_7_score_sh_9, phq_9_date_sh_12, phq_9_score_sh_12, gad_7_date_sh_12, gad_7_score_sh_12, fs_source, usda_date_fs_0, usda_score_fs_0, usda_date_fs_3, usda_score_fs_3, usda_date_fs_6, usda_score_fs_6, usda_date_fs_9, usda_score_fs_9, usda_date_fs_12, usda_score_fs_12, gse_date_steps_0, gse_score_steps_0, gse_date_steps_3, gse_score_steps_3, gse_date_steps_6, gse_score_steps_6, gse_date_steps_9, gse_score_steps_9, gse_date_steps_12, gse_score_steps_12, phq_9_date_calm_pre, phq_9_score_calm_pre, phq_9_date_calm_post, phq_9_score_calm_post, gad_7_date_calm_pre, gad_7_score_calm_pre, gad_7_date_calm_post, gad_7_score_calm_post, gse_date_calm_pre, gse_score_calm_pre, gse_date_calm_post, gse_score_calm_post, referral_sources, usda_date_initial, usda_score_initial, gse_date_initial, gse_score_initial, program_status_0, enrollment_date_steps, enrollment_date_job_training, enrollment_date_calm, referral_date_sh, enrollment_date_sh, referral_date_fs))
+```
+
+```{r}
+demo$referred_sh[match(sh_voucher$participant_id, demo$participant_id)] <- "yes"
+demo$enrollment_date <- demo$enrollment_date %>% 
+  as.numeric(demo$enrollment_date)
+demo$enrollment_date <- as.Date(demo$enrollment_date, origin="1899-12-30")
+```
+
+```{r}
+dput(as.character(colnames(aggregate)))
+```
+
+```{r}
+# long versions
+readr::write_csv(calm, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Analysis/Steph/long datasets/q2/q2_hhh_calm_long_09102021.csv")
+
+readr::write_csv(demo, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Analysis/Steph/long datasets/q2/q2_hhh_demo_long_09102021.csv")
+
+readr::write_csv(grocery, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Analysis/Steph/long datasets/q2/q2_hhh_grocery_long_09102021.csv")
+
+readr::write_csv(gse, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Analysis/Steph/long datasets/q2/q2_hhh_gse_long_09102021.csv")
+
+readr::write_csv(sh_voucher, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Analysis/Steph/long datasets/q2/q2_hhh_sh_voucher_long_09102021.csv")
+
+readr::write_csv(steps, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Analysis/Steph/long datasets/q2/q2_hhh_steps_long_09102021.csv")
+
+readr::write_csv(usda, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Analysis/Steph/long datasets/q2/q2_hhh_usda_long_09102021.csv")
+
+readr::write_csv(safe_harbor, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Analysis/Steph/long datasets/q2/q2_hhh_safe_harbor_long_09102021.csv")
+
+readr::write_csv(job_training, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Analysis/Steph/long datasets/q2/q2_hhh_job_training_long_09102021.csv")
+
+readr::write_csv(food_security, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Analysis/Steph/long datasets/q2/q2_hhh_food_security_long_09102021.csv")
+
+readr::write_csv(program_status, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Analysis/Steph/long datasets/q2/q2_hhh_program_status_long_09102021.csv")
+
+# readr::write_csv(aggregate, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Analysis/Steph/long datasets/q2/q2_hhh_aggregate_long_09102021.csv")
+```
+
+
+
+# wide version
+
+```{r}
+usda_wide <- usda %>%
+  pivot_wider(
+    names_from = "visit",
+    names_sep = ".",
+    values_from = c(usda_response_date, usda_site, usda_hh3, usda_hh4, usda_ad1, 
+                    usda_ad1a, usda_ad2, usda_ad3))
+    
+gse_wide <- gse %>% 
+  pivot_wider(
+    names_from = "visit",
+    names_sep = ".",
+    values_from = c(gse_response_date, gse_site, gse_1, gse_2, gse_3, gse_4,
+                    gse_5, gse_6, gse_7, gse_8, gse_9, gse_10))
+
+# grocery_wide <- grocery %>% 
+#   pivot_wider(
+#     names_from = "visit",
+#     names_sep = ".",
+#     values_from = c(grocery_site, grocery_response_date, 
+#                     grocery_location_of_service, household_size, 
+#                     household_grocery_value))
+```
+
+```{r}
+# merged usda & gse to demographic (update:6/21/2021)
+q1_hhh_wide <- demo %>%
+  left_join(usda_wide, by = c("participant_id" = "subject_id")) %>% 
+  left_join(gse_wide, by=c("participant_id" = "subject_id")) 
+  # left_join(grocery_wide, by=c("participant_id" = "subject_id"))
+
+# using replace_with_na_all to replace ALL values that meet a condition across an entire dataset. 
+na_strings <- c("n/a") # can add more if found
+q1_hhh_wide <- q1_hhh_wide %>% naniar::replace_with_na_all(condition= ~.x %in% na_strings)
+
+# find all columns with all missing values
+allmisscols <- apply(q1_hhh_wide,2, function(x)all(is.na(x)));  
+colswithallmiss <-names(allmisscols[allmisscols>0]);    
+print("the columns with all values missing");    
+print(colswithallmiss);
+
+# remove columns that have all cells = NAs
+# q1_hhh_wide <- q1_hhh_wide[colSums(!is.na(q1_hhh_wide)) > 0] 
+
+# create gse_date/score_steps_0
+# q1_hhh_wide['gse_date_steps_0'] <- NA
+# q1_hhh_wide['gse_score_steps_0'] <- NA
+
+# q1_hhh_wide <-q1_hhh_wide %>% select("participant id", "initial intake date", "current intake date",
+#              "age", "sex", "race/ethnicity", "marital status", "education level",
+#              "employment status/occupation", "household income",
+#              "living situation", "eligible for project hhh", "enrollment date",
+#              "usda_date_initial", "usda_score_initial", "gse_date_initial",
+#              "gse_score_initial", "program status_0", "referred_steps",
+#              "enrollment_date_steps", "gse_date_steps_0", "gse_score_steps_0",
+#              "enrolled_jt", "enrollment_date_job training", "gse_date_jt_0",
+#              "gse_score_jt_0", "referred_fs", "referral_date_fs", visit, everything())
+```
+
+## Convert from the merged wide dataset to long
+```{r}
+# q1_hhh_long<-
+#   q1_hhh_wide %>%
+#   tidyr::pivot_longer(
+#    cols = -c("participant_id", "initial_intake_date", "current_intake_date",
+#              "age", "sex", "race_ethnicity", "marital_status", "education_level",
+#              "employment_status_occupation", "household_income",
+#              "living_situation", "eligible_for_project_hhh", "enrollment_date",
+#              "referred_steps", "enrolled_jt", "referred_fs"),
+#    names_to = c('.value', 'visit'),
+#    names_sep = '[.]',
+#    values_drop_na = FALSE) %>% # If TRUE, will drop rows that contain only NAs in 
+#                               # the value_to column. This effectively converts 
+#                               # explicit missing values to implicit missing values,
+#                               # and should generally be used only when missing 
+#                               # values in data were created by its structure.
+#   select("participant_id", "initial_intake_date", "current_intake_date", visit,
+#              "age", "sex", "race_ethnicity", "marital_status", "education_level",
+#              "employment_status_occupation", "household_income",
+#              "living_situation", "eligible_for_project_hhh", "enrollment_date",
+#              "usda_date_initial", "usda_score_initial", "gse_date_initial",
+#              "gse_score_initial", "program_status_0", "referred_steps",
+#              "enrollment_date_steps", "gse_date_steps_0", "gse_score_steps_0",
+#              "enrolled_jt", "enrollment_date_job_training", "gse_date_jt_0",
+#              "gse_score_jt_0", "referred_fs", "referral_date_fs", everything())
+```
+
+
+## Save merged file
+```{r}
+# wide version
+readr::write_csv(q1_hhh_wide, "/Users/chiufengyap/The University of Texas Health Science Center at Houston/SPH THCI Eval - General/Data Collection/Quantitative/Center of Hope/Analysis/Steph/wide datasets/q1_hhh_wide_07072021.csv")
+```
+
